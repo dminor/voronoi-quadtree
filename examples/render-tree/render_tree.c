@@ -131,64 +131,65 @@ int main(int argc, char **argv)
     struct VoronoiQuadtreeNode *node = 0;
     if (type == SHPT_POINT) {
 
-        double *xs = malloc(entcount * sizeof(double));
-        double *ys = malloc(entcount * sizeof(double));
+        struct Site *sites = malloc(entcount * sizeof(struct Site));
 
         for (int i = 0; i < entcount; ++i) {
             SHPObject *obj = SHPReadObject(shp, i);
             render_point(f, i, obj->padfX[0], obj->padfY[0]);
 
-            xs[i] = obj->padfX[0];
-            ys[i] = obj->padfY[0];
+            sites[i].n = 1;
+            sites[i].xs = malloc(sizeof(double));
+            sites[i].xs[0] = obj->padfX[0];
+            sites[i].ys = malloc(sizeof(double)); 
+            sites[i].ys[0] = obj->padfY[0];
+            sites[i].metric = pt_euclidean_metric;
+
             SHPDestroyObject(obj);
         }
 
-        node = build_voronoi_quadtree_pts(entcount, xs, ys, max_depth);
+        node = build_voronoi_quadtree(entcount, sites, max_depth);
 
-        free(xs);
-        free(ys);
-    } else if (type == SHPT_ARC || type == SHPT_POLYGON) {
-
-        //get total number of vertices across all objects
-        int vcount = 0;
         for (int i = 0; i < entcount; ++i) {
-            SHPObject *obj = SHPReadObject(shp, i);
-            vcount += obj->nVertices; 
-            SHPDestroyObject(obj); 
+            free(sites[i].xs);
+            free(sites[i].ys);
         }
 
-        if (vcount <= 0) {
-            printf("error: shapefile does not contain any vertices\n");
-            exit(1);
-        } 
+        free(sites);
 
-        //storage for vertices and sites
-        double *xs = malloc(vcount * sizeof(double));
-        double *ys = malloc(vcount * sizeof(double));
-        int *sites = malloc(vcount * sizeof(int));
+    } else if (type == SHPT_ARC || type == SHPT_POLYGON) {
 
-        vcount = 0;
+        struct Site *sites = malloc(entcount * sizeof(struct Site));
+
         for (int i = 0; i < entcount; ++i) {
             SHPObject *obj = SHPReadObject(shp, i);
             if (type == SHPT_ARC) render_line(f, i, obj);
             else render_poly(f, i, obj);
 
+            sites[i].n = obj->nVertices;
+            sites[i].xs = malloc(sites[i].n * sizeof(double));
+            sites[i].ys = malloc(sites[i].n * sizeof(double));
+
             for (int j = 0; j < obj->nVertices; ++j) { 
-                xs[vcount] = obj->padfX[j];
-                ys[vcount] = obj->padfY[j];
-                sites[vcount] = i; 
-                ++vcount; 
+                sites[i].xs[j] = obj->padfX[j];
+                sites[i].ys[j] = obj->padfY[j];
             }
+
+            if (type == SHPT_ARC) sites[i].metric = line_euclidean_metric;
+            else sites[i].metric = poly_euclidean_metric;
 
             SHPDestroyObject(obj); 
         }
 
-        if (type == SHPT_ARC) node = build_voronoi_quadtree_lines(vcount, xs, ys, sites, max_depth);
-        else node = build_voronoi_quadtree_polys(vcount, xs, ys, sites, max_depth);
+        node = build_voronoi_quadtree(entcount, sites, max_depth);
 
-        free(xs);
-        free(ys);
+        for (int i = 0; i < entcount; ++i) {
+            free(sites[i].xs);
+            free(sites[i].ys);
+        }
+
         free(sites);
+
+
     } else { 
         printf("error: shapefile does not contain point, line or areal data\n");
         exit(1); 

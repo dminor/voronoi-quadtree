@@ -29,8 +29,19 @@ struct VoronoiQuadtreeNode {
     int site_id;
 };
 
-struct VoronoiQuadtreeNode *build_voronoi_quadtree_pts(int n, double *xs, double *ys, int max_depth);
-struct VoronoiQuadtreeNode *build_voronoi_quadtree_lines(int n, double *xs, double *ys, int *sites, int max_depth);
-struct VoronoiQuadtreeNode *build_voronoi_quadtree_polys(int n, double *xs, double *ys, int *sites, int max_depth);
+struct Site {
+    int n;
+    double *xs;
+    double *ys;
+    void *data;
+    double (*metric) (double x, double y, struct Site *site);
+};
+
+double pt_euclidean_metric(double x, double y, struct Site *site);
+double line_euclidean_metric(double x, double y, struct Site *site);
+double poly_euclidean_metric(double x, double y, struct Site *site);
+
+struct VoronoiQuadtreeNode *build_voronoi_quadtree(int n, struct Site *sites, int max_depth);
+void free_voronoi_quadtree(struct VoronoiQuadtreeNode *n);
 
 #endif

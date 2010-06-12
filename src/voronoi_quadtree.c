@@ -33,22 +33,9 @@ THE SOFTWARE.
 
 #include "voronoi_quadtree.h"
 
-typedef int (*closest_pt_fn)(unsigned int n, double x, double y, double *xs, double *ys, int *sites);
-
-static int closest_pt(unsigned int n, double x, double y, double *xs, double *ys, int *sites)
-{
-    int site = -1;
-
-    double distance = DBL_MAX;
-    for (int i = 0; i < n; ++i) {
-        double d = (x-xs[i])*(x-xs[i]) + (y-ys[i])*(y-ys[i]);
-        if (d < distance) {
-            site = i;
-            distance = d; 
-        }
-    }
-
-    return site;
+double pt_euclidean_metric(double x, double y, struct Site *site)
+{ 
+    return (x-site->xs[0])*(x-site->xs[0]) + (y-site->ys[0])*(y-site->ys[0]);
 }
 
 static double pt_distance_to_line(double x, double y, double a_x, double a_y, double b_x, double b_y)
@@ -74,55 +61,49 @@ static double pt_distance_to_line(double x, double y, double a_x, double a_y, do
     return (line_x-x)*(line_x-x) + (line_y-y)*(line_y-y); 
 }
 
-static int closest_pt_lines(unsigned int n, double x, double y, double *xs, double *ys, int *sites)
-{
-    int site = -1;
-
-    int current_site = sites[0];
-
+double line_euclidean_metric(double x, double y, struct Site *site)
+{ 
     double distance = DBL_MAX;
-    for (int i = 0; i < n; ++i) {
-        //if end of object, skip to next
-        if (i + 1 != n && sites[i + 1] != current_site) {
-            current_site = sites[i + 1];
-        } else { 
-            double d = pt_distance_to_line(x, y, xs[i], ys[i], xs[i + 1], ys[i + 1]); 
+    for (int i = 0; i < site->n; ++i) {
+        double d = pt_distance_to_line(x, y, site->xs[i], site->ys[i], site->xs[i + 1], site->ys[i + 1]); 
 
-            if (d < distance) {
-                site = sites[i];
-                distance = d; 
-            }
+        if (d < distance) {
+            distance = d; 
         }
     }
 
-    return site;
+    return distance;
 }
 
-static int closest_pt_polys(unsigned int n, double x, double y, double *xs, double *ys, int *sites)
+double poly_euclidean_metric(double x, double y, struct Site *site)
+{ 
+    double distance = DBL_MAX;
+    for (int i = 0; i < site->n; ++i) {
+
+        double d; 
+        if (i + 1 == site->n) {
+            d = pt_distance_to_line(x, y, site->xs[i], site->ys[i], site->xs[0], site->ys[0]); 
+        } else { 
+            d = pt_distance_to_line(x, y, site->xs[i], site->ys[i], site->xs[i + 1], site->ys[i + 1]); 
+        }
+
+        if (d < distance) { 
+            distance = d; 
+        }
+    }
+
+    return distance;
+}
+
+static int closest_site(double x, double y, int n, struct Site *sites)
 {
     int site = -1;
 
-    int start_index = 0;
-    int current_site = sites[0];
-
     double distance = DBL_MAX;
     for (int i = 0; i < n; ++i) {
-
-        double d;
-
-        //if next site is different, we need to test line that closes polygon
-        if (i + 1 == n || sites[i + 1] != current_site) {
-            d = pt_distance_to_line(x, y, xs[i], ys[i], xs[start_index], ys[start_index]); 
-            if (i + 1 != n) {
-                current_site = sites[i + 1];
-                start_index = i + 1;
-            }
-        } else { 
-            d = pt_distance_to_line(x, y, xs[i], ys[i], xs[i + 1], ys[i + 1]); 
-        }
-
+        double d = sites[i].metric(x, y, &sites[i]); 
         if (d < distance) {
-            site = sites[i];
+            site = i;
             distance = d; 
         }
     }
@@ -130,14 +111,14 @@ static int closest_pt_polys(unsigned int n, double x, double y, double *xs, doub
     return site;
 }
 
-static struct VoronoiQuadtreeNode *voronoi_quadtree_worker(closest_pt_fn fn, double x1, double x2, double y1, double y2, int n, int depth, int max_depth, double *xs, double *ys, int *sites)
+static struct VoronoiQuadtreeNode *voronoi_quadtree_worker(double x1, double x2, double y1, double y2, int n, struct Site *sites, int depth, int max_depth)
 {
     struct VoronoiQuadtreeNode *node = malloc(sizeof(struct VoronoiQuadtreeNode)); 
 
-    int cp1 = fn(n, x1, y1, xs, ys, sites);
-    int cp2 = fn(n, x1, y2, xs, ys, sites);
-    int cp3 = fn(n, x2, y1, xs, ys, sites);
-    int cp4 = fn(n, x2, y2, xs, ys, sites);
+    int cp1 = closest_site(x1, y1, n, sites);
+    int cp2 = closest_site(x1, y2, n, sites);
+    int cp3 = closest_site(x2, y1, n, sites);
+    int cp4 = closest_site(x2, y2, n, sites);
 
     if (cp1 == cp2 && cp2 == cp3 && cp3 == cp4 || depth == max_depth) {
 
@@ -154,56 +135,32 @@ static struct VoronoiQuadtreeNode *voronoi_quadtree_worker(closest_pt_fn fn, dou
         double xmid = x1 + 0.5 * (x2 - x1);
         double ymid = y1 + 0.5 * (y2 - y1);
 
-        node->ne = voronoi_quadtree_worker(fn, xmid, x2, y1, ymid, n, depth+1, max_depth, xs, ys, sites); 
-        node->nw = voronoi_quadtree_worker(fn, x1, xmid, y1, ymid, n, depth+1, max_depth, xs, ys, sites); 
-        node->sw = voronoi_quadtree_worker(fn, x1, xmid, ymid, y2, n, depth+1, max_depth, xs, ys, sites); 
-        node->se = voronoi_quadtree_worker(fn, xmid, x2, ymid, y2, n, depth+1, max_depth, xs, ys, sites); 
+        node->ne = voronoi_quadtree_worker(xmid, x2, y1, ymid, n, sites, depth+1, max_depth);
+        node->nw = voronoi_quadtree_worker(x1, xmid, y1, ymid, n, sites, depth+1, max_depth);
+        node->sw = voronoi_quadtree_worker(x1, xmid, ymid, y2, n, sites, depth+1, max_depth);
+        node->se = voronoi_quadtree_worker(xmid, x2, ymid, y2, n, sites, depth+1, max_depth);
     }
 
     return node;
 
 }
 
-struct VoronoiQuadtreeNode *build_voronoi_quadtree_pts(int n, double *xs, double *ys, int max_depth)
-{ 
-    //determine bounds
-    double x1 = xs[0], x2 = xs[0], y1 = ys[0], y2 = ys[0];
-    for (int i = 0; i < n; ++i) {
-        if (xs[i] < x1) x1 = xs[i];
-        if (xs[i] > x2) x2 = xs[i];
-        if (ys[i] < y1) y1 = ys[i];
-        if (ys[i] > y2) y2 = ys[i];
-    }
-
-    return voronoi_quadtree_worker(closest_pt, x1, x2, y1, y2, n, 0, max_depth, xs, ys, 0);
-}
-
-struct VoronoiQuadtreeNode *build_voronoi_quadtree_lines(int n, double *xs, double *ys, int *sites, int max_depth)
+struct VoronoiQuadtreeNode *build_voronoi_quadtree(int n, struct Site *sites, int max_depth)
 {
+    if (n == 0) return 0;
+
     //determine bounds
-    double x1 = xs[0], x2 = xs[0], y1 = ys[0], y2 = ys[0];
+    double x1 = sites[0].xs[0], x2 = sites[0].xs[0], y1 = sites[0].ys[0], y2 = sites[0].ys[0];
     for (int i = 0; i < n; ++i) {
-        if (xs[i] < x1) x1 = xs[i];
-        if (xs[i] > x2) x2 = xs[i];
-        if (ys[i] < y1) y1 = ys[i];
-        if (ys[i] > y2) y2 = ys[i];
+        for (int j = 0; j < sites[i].n; ++j) {
+            if (sites[i].xs[j] < x1) x1 = sites[i].xs[j];
+            if (sites[i].xs[j] > x2) x2 = sites[i].xs[j];
+            if (sites[i].ys[j] < y1) y1 = sites[i].ys[j];
+            if (sites[i].ys[j] > y2) y2 = sites[i].ys[j];
+        }
     }
 
-    return voronoi_quadtree_worker(closest_pt_lines, x1, x2, y1, y2, n, 0, max_depth, xs, ys, sites);
+    return voronoi_quadtree_worker(x1, x2, y1, y2, n, sites, 0, max_depth);
 
 }
 
-struct VoronoiQuadtreeNode *build_voronoi_quadtree_polys(int n, double *xs, double *ys, int *sites, int max_depth)
-{
-    //determine bounds
-    double x1 = xs[0], x2 = xs[0], y1 = ys[0], y2 = ys[0];
-    for (int i = 0; i < n; ++i) {
-        if (xs[i] < x1) x1 = xs[i];
-        if (xs[i] > x2) x2 = xs[i];
-        if (ys[i] < y1) y1 = ys[i];
-        if (ys[i] > y2) y2 = ys[i];
-    }
-
-    return voronoi_quadtree_worker(closest_pt_polys, x1, x2, y1, y2, n, 0, max_depth, xs, ys, sites);
-
-}
