@@ -1,5 +1,5 @@
 
-DIRS = src examples 
+DIRS = examples 
 
 all:
 	mkdir -p bin

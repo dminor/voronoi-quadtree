@@ -23,25 +23,87 @@ THE SOFTWARE.
 #ifndef VORONOI_QUADTREE_H_ 
 #define VORONOI_QUADTREE_H_ 
 
-struct VoronoiQuadtreeNode {
-    struct VoronoiQuadtreeNode *ne, *nw, *sw, *se;
-    double x1, x2, y1, y2;
-    int site_id;
+#include <limits>
+
+namespace voronoi_quadtree {
+
+    template<class Site> class VoronoiQuadtree {
+
+    public:
+
+        template<class T> struct Node {
+            Node *ne, *nw, *sw, *se;
+            double x1, x2, y1, y2;
+            T *site;
+        };
+
+        VoronoiQuadtree(double x1, double x2, double y1, double y2, Site *sites, size_t n, size_t max_depth) : sites(sites), n(n), max_depth(max_depth) 
+        {        
+            root = worker(x1, x2, y1, y2, 0); 
+        }
+
+        virtual ~VoronoiQuadtree()
+        { 
+        }
+
+        Node<Site> *root;
+
+    private:
+
+        Site *closest_site(double x, double y)
+        {
+            Site *site = 0;
+
+            double distance = std::numeric_limits<double>::max();
+            for (int i = 0; i < n; ++i) {
+                double d = sites[i].distance_to(x, y);
+                if (d < distance) {
+                    site = &sites[i];
+                    distance = d; 
+                }
+            }
+
+            return site; 
+        }
+
+        Node<Site> *worker(double x1, double x2, double y1, double y2, int depth)
+        {
+            Node<Site> *node = new Node<Site>; 
+
+            Site *site1 = closest_site(x1, y1);
+            Site *site2 = closest_site(x1, y2);
+            Site *site3 = closest_site(x2, y1);
+            Site *site4 = closest_site(x2, y2);
+
+            if (site1 == site2 && site2 == site3 && site3 == site4 || depth == max_depth) {
+
+                node->ne = node->nw = node->sw = node->se = 0;
+                node->x1 = x1;
+                node->x2 = x2;
+                node->y1 = y1;
+                node->y2 = y2;
+
+                node->site = site1;
+
+            } else {
+
+                double xmid = x1 + 0.5 * (x2 - x1);
+                double ymid = y1 + 0.5 * (y2 - y1);
+
+                node->ne = worker(xmid, x2, y1, ymid, depth+1);
+                node->nw = worker(x1, xmid, y1, ymid, depth+1);
+                node->sw = worker(x1, xmid, ymid, y2, depth+1);
+                node->se = worker(xmid, x2, ymid, y2, depth+1);
+            }
+
+            return node; 
+
+        }
+
+        Site *sites;
+        size_t n;
+        size_t max_depth;
+    };
 };
-
-struct Site {
-    int n;
-    double *xs;
-    double *ys;
-    void *data;
-    double (*metric) (double x, double y, struct Site *site);
-};
-
-double pt_euclidean_metric(double x, double y, struct Site *site);
-double line_euclidean_metric(double x, double y, struct Site *site);
-double poly_euclidean_metric(double x, double y, struct Site *site);
-
-struct VoronoiQuadtreeNode *build_voronoi_quadtree(int n, struct Site *sites, int max_depth);
-void free_voronoi_quadtree(struct VoronoiQuadtreeNode *n);
 
 #endif

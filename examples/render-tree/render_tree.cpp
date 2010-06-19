@@ -28,6 +28,10 @@ THE SOFTWARE.
 
 #include "voronoi_quadtree.h"
 
+#include "site.h"
+
+using namespace voronoi_quadtree;
+
 void render_point(FILE *f, int site, double x, double y)
 {
     fprintf(f, "colour-site-%d\n", site); 
@@ -62,10 +66,10 @@ void render_poly(FILE *f, int site, SHPObject *obj)
     fprintf(f, "fill\n"); 
 }
 
-void render_voronoi_quadtree(FILE *f, struct VoronoiQuadtreeNode *node)
+void render_voronoi_quadtree(FILE *f, VoronoiQuadtree<Site>::Node<Site> *node)
 {
     if (node->ne == 0 && node->nw == 0 && node->sw == 0 && node->se == 0) {
-        fprintf(f, "colour-site-%d\n", node->site_id);
+        fprintf(f, "colour-site-%d\n", node->site->id);
         fprintf(f, "%.1f %.1f %.1f %.1f box\n", node->x1, node->x2, node->y1, node->y2);
     } else {
         render_voronoi_quadtree(f, node->ne);
@@ -95,7 +99,9 @@ int main(int argc, char **argv)
 
     int entcount;
     int type;
-    SHPGetInfo(shp, &entcount, &type, 0, 0); 
+    double min[4];
+    double max[4];
+    SHPGetInfo(shp, &entcount, &type, min, max); 
 
     if (entcount <= 0) {
         printf("error: shapefile is empty\n");
@@ -128,37 +134,30 @@ int main(int argc, char **argv)
         fprintf(f, "/colour-site-%d {%.1f %.1f %.1f setrgbcolor } def\n", i, (double)rand()/(double)RAND_MAX, (double)rand()/(double)RAND_MAX,(double)rand()/(double)RAND_MAX);
     }
 
-    struct VoronoiQuadtreeNode *node = 0;
+    Site *sites = 0;
+
     if (type == SHPT_POINT) {
 
-        struct Site *sites = malloc(entcount * sizeof(struct Site));
+        sites = new PointSite[entcount];
 
         for (int i = 0; i < entcount; ++i) {
             SHPObject *obj = SHPReadObject(shp, i);
             render_point(f, i, obj->padfX[0], obj->padfY[0]);
 
             sites[i].n = 1;
-            sites[i].xs = malloc(sizeof(double));
+            sites[i].id = i;
+            sites[i].xs = new double; 
             sites[i].xs[0] = obj->padfX[0];
-            sites[i].ys = malloc(sizeof(double)); 
+            sites[i].ys = new double; 
             sites[i].ys[0] = obj->padfY[0];
-            sites[i].metric = pt_euclidean_metric;
 
             SHPDestroyObject(obj);
-        }
-
-        node = build_voronoi_quadtree(entcount, sites, max_depth);
-
-        for (int i = 0; i < entcount; ++i) {
-            free(sites[i].xs);
-            free(sites[i].ys);
-        }
-
-        free(sites);
+        } 
 
     } else if (type == SHPT_ARC || type == SHPT_POLYGON) {
 
-        struct Site *sites = malloc(entcount * sizeof(struct Site));
+        if (type == SHPT_ARC) sites = new LineSite[entcount];
+        else sites = new PolygonSite[entcount]; 
 
         for (int i = 0; i < entcount; ++i) {
             SHPObject *obj = SHPReadObject(shp, i);
@@ -166,29 +165,17 @@ int main(int argc, char **argv)
             else render_poly(f, i, obj);
 
             sites[i].n = obj->nVertices;
-            sites[i].xs = malloc(sites[i].n * sizeof(double));
-            sites[i].ys = malloc(sites[i].n * sizeof(double));
+            sites[i].id = i;
+            sites[i].xs = new double[sites[i].n];
+            sites[i].ys = new double[sites[i].n]; 
 
             for (int j = 0; j < obj->nVertices; ++j) { 
                 sites[i].xs[j] = obj->padfX[j];
                 sites[i].ys[j] = obj->padfY[j];
-            }
-
-            if (type == SHPT_ARC) sites[i].metric = line_euclidean_metric;
-            else sites[i].metric = poly_euclidean_metric;
+            } 
 
             SHPDestroyObject(obj); 
         }
-
-        node = build_voronoi_quadtree(entcount, sites, max_depth);
-
-        for (int i = 0; i < entcount; ++i) {
-            free(sites[i].xs);
-            free(sites[i].ys);
-        }
-
-        free(sites);
-
 
     } else { 
         printf("error: shapefile does not contain point, line or areal data\n");
@@ -197,8 +184,15 @@ int main(int argc, char **argv)
 
     SHPClose(shp);
 
-    if (node) render_voronoi_quadtree(f, node);
-    fclose(f);
+    if (sites) {
+        VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(min[0], max[0], min[1], max[1], sites, entcount, max_depth);
+        render_voronoi_quadtree(f, qt->root);
+        delete qt;
 
+        delete[] sites;
+    }
+
+    fclose(f);
+ 
     return 0;
 }
