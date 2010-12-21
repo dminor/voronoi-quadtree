@@ -28,9 +28,87 @@ THE SOFTWARE.
 
 #include "voronoi_quadtree.h"
 
-#include "site.h"
+struct Site {
 
-using namespace voronoi_quadtree;
+    SHPObject *obj;
+    size_t id;
+
+    Site() : obj(0), id(0)
+    {
+    }
+
+    virtual ~Site()
+    {
+        if (obj) SHPDestroyObject(obj);
+    } 
+
+};
+
+double pt_distance_to_line(double x, double y, double a_x, double a_y, double b_x, double b_y)
+{
+    double vba_x = b_x - a_x;
+    double vba_y = b_y - a_y;
+
+    double vpta_x = x - a_x;
+    double vpta_y = y - a_y;
+
+    double denom = (vba_x*vba_x + vba_y*vba_y);
+    if (denom == 0.0) {
+        return (a_x-x)*(a_x-x) + (a_y-y)*(a_y-y);
+    }
+
+    double t = (vba_x*vpta_x + vba_y*vpta_y) / denom;
+    if (t > 1.0) t = 1.0;
+    if (t < 0.0) t = 0.0;
+
+    double line_x = a_x + t * vba_x;
+    double line_y = a_y + t * vba_y;
+
+    return (line_x-x)*(line_x-x) + (line_y-y)*(line_y-y); 
+} 
+
+double metric(Site *site, double x, double y)
+{
+    SHPObject *obj = site->obj;
+    double distance = std::numeric_limits<double>::max(); 
+
+    if (obj) {
+        switch(obj->nSHPType) {
+
+            case SHPT_POINT:
+                distance = (x-obj->padfX[0])*(x-obj->padfX[0]) + (y-obj->padfY[0])*(y-obj->padfY[0]);
+                break;
+
+            case SHPT_ARC:
+                for (int i = 0; i < obj->nVertices; ++i) {
+                    double d = pt_distance_to_line(x, y, obj->padfX[i], obj->padfY[i], obj->padfX[i + 1], obj->padfY[i + 1]); 
+
+                    if (d < distance) {
+                        distance = d; 
+                    }
+                } 
+                break;
+
+            case SHPT_POLYGON:
+                for (int i = 0; i < obj->nVertices; ++i) {
+
+                    double d; 
+                    if (i + 1 == obj->nVertices) {
+                        d = pt_distance_to_line(x, y, obj->padfX[i], obj->padfY[i], obj->padfX[0], obj->padfY[0]); 
+                    } else { 
+                        d = pt_distance_to_line(x, y, obj->padfX[i], obj->padfY[i], obj->padfX[i + 1], obj->padfY[i + 1]); 
+                    }
+
+                    if (d < distance) { 
+                        distance = d; 
+                    }
+                } 
+                break; 
+        }
+    }
+
+    return distance;
+}
 
 void render_point(FILE *f, int site, double x, double y)
 {
@@ -134,63 +212,35 @@ int main(int argc, char **argv)
         fprintf(f, "/colour-site-%d {%.1f %.1f %.1f setrgbcolor } def\n", i, (double)rand()/(double)RAND_MAX, (double)rand()/(double)RAND_MAX,(double)rand()/(double)RAND_MAX);
     }
 
-    Site *sites = 0;
+    Site *sites = new Site[entcount];
 
-    if (type == SHPT_POINT) {
+    for (int i = 0; i < entcount; ++i) {
+        sites[i].id = i;
+        sites[i].obj = SHPReadObject(shp, i);
 
-        sites = new PointSite[entcount];
+        switch(type) {
 
-        for (int i = 0; i < entcount; ++i) {
-            SHPObject *obj = SHPReadObject(shp, i);
-            render_point(f, i, obj->padfX[0], obj->padfY[0]);
+            case SHPT_POINT:
+                render_point(f, i, sites[i].obj->padfX[0], sites[i].obj->padfY[0]);
+                break;
 
-            sites[i].n = 1;
-            sites[i].id = i;
-            sites[i].xs = new double; 
-            sites[i].xs[0] = obj->padfX[0];
-            sites[i].ys = new double; 
-            sites[i].ys[0] = obj->padfY[0];
+            case SHPT_ARC:
+                render_line(f, i, sites[i].obj);
+                break;
 
-            SHPDestroyObject(obj);
-        } 
+            case SHPT_POLYGON:
+                render_poly(f, i, sites[i].obj);
+                break;
 
-    } else if (type == SHPT_ARC || type == SHPT_POLYGON) {
-
-        if (type == SHPT_ARC) sites = new LineSite[entcount];
-        else sites = new PolygonSite[entcount]; 
-
-        for (int i = 0; i < entcount; ++i) {
-            SHPObject *obj = SHPReadObject(shp, i);
-            if (type == SHPT_ARC) render_line(f, i, obj);
-            else render_poly(f, i, obj);
-
-            sites[i].n = obj->nVertices;
-            sites[i].id = i;
-            sites[i].xs = new double[sites[i].n];
-            sites[i].ys = new double[sites[i].n]; 
-
-            for (int j = 0; j < obj->nVertices; ++j) { 
-                sites[i].xs[j] = obj->padfX[j];
-                sites[i].ys[j] = obj->padfY[j];
-            } 
-
-            SHPDestroyObject(obj); 
         }
-
-    } else { 
-        printf("error: shapefile does not contain point, line or areal data\n");
-        exit(1); 
     }
 
+    VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(min[0], max[0], min[1], max[1], sites, entcount, max_depth, metric);
+    render_voronoi_quadtree(f, qt->root);
+    delete qt;
+
+    delete[] sites;
     SHPClose(shp);
-
-    if (sites) {
-        VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(min[0], max[0], min[1], max[1], sites, entcount, max_depth);
-        render_voronoi_quadtree(f, qt->root);
-        delete qt;
-
-        delete[] sites;
-    }
 
     fclose(f);
  
