@@ -42,6 +42,10 @@ struct Site {
         if (obj) SHPDestroyObject(obj);
     } 
 
+    void set_obj(SHPObject *obj)
+    {
+        this->obj = obj;
+    }
 };
 
 double pt_distance_to_line(double x, double y, double a_x, double a_y, double b_x, double b_y)
@@ -76,12 +80,15 @@ double metric(Site *site, double x, double y)
         switch(obj->nSHPType) {
 
             case SHPT_POINT:
-                distance = (x-obj->padfX[0])*(x-obj->padfX[0]) + (y-obj->padfY[0])*(y-obj->padfY[0]);
+                distance = (x-obj->padfX[0])*(x-obj->padfX[0])
+                    + (y-obj->padfY[0])*(y-obj->padfY[0]);
                 break;
 
             case SHPT_ARC:
                 for (int i = 0; i < obj->nVertices; ++i) {
-                    double d = pt_distance_to_line(x, y, obj->padfX[i], obj->padfY[i], obj->padfX[i + 1], obj->padfY[i + 1]); 
+                    double d = pt_distance_to_line(x, y,
+                        obj->padfX[i], obj->padfY[i],
+                        obj->padfX[i + 1], obj->padfY[i + 1]); 
 
                     if (d < distance) {
                         distance = d; 
@@ -94,9 +101,13 @@ double metric(Site *site, double x, double y)
 
                     double d; 
                     if (i + 1 == obj->nVertices) {
-                        d = pt_distance_to_line(x, y, obj->padfX[i], obj->padfY[i], obj->padfX[0], obj->padfY[0]); 
+                        d = pt_distance_to_line(x, y,
+                            obj->padfX[i], obj->padfY[i],
+                            obj->padfX[0], obj->padfY[0]); 
                     } else { 
-                        d = pt_distance_to_line(x, y, obj->padfX[i], obj->padfY[i], obj->padfX[i + 1], obj->padfY[i + 1]); 
+                        d = pt_distance_to_line(x, y,
+                            obj->padfX[i], obj->padfY[i],
+                            obj->padfX[i + 1], obj->padfY[i + 1]); 
                     }
 
                     if (d < distance) { 
@@ -144,11 +155,12 @@ void render_poly(FILE *f, int site, SHPObject *obj)
     fprintf(f, "fill\n"); 
 }
 
-void render_voronoi_quadtree(FILE *f, VoronoiQuadtree<Site>::Node<Site> *node)
+void render_voronoi_quadtree(FILE *f, VoronoiQuadtree<Site>::Node *node)
 {
     if (node->ne == 0 && node->nw == 0 && node->sw == 0 && node->se == 0) {
         fprintf(f, "colour-site-%d\n", node->site->id);
-        fprintf(f, "%.1f %.1f %.1f %.1f box\n", node->x1, node->x2, node->y1, node->y2);
+        fprintf(f, "%.1f %.1f %.1f %.1f box\n", node->x1, node->x2,
+            node->y1, node->y2);
     } else {
         render_voronoi_quadtree(f, node->ne);
         render_voronoi_quadtree(f, node->nw);
@@ -221,7 +233,8 @@ int main(int argc, char **argv)
         switch(type) {
 
             case SHPT_POINT:
-                render_point(f, i, sites[i].obj->padfX[0], sites[i].obj->padfY[0]);
+                render_point(f, i,
+                    sites[i].obj->padfX[0], sites[i].obj->padfY[0]);
                 break;
 
             case SHPT_ARC:
@@ -235,7 +248,8 @@ int main(int argc, char **argv)
         }
     }
 
-    VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(min[0], max[0], min[1], max[1], sites, entcount, max_depth, metric);
+    VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(min[0], max[0],
+        min[1], max[1], sites, entcount, max_depth, metric);
     render_voronoi_quadtree(f, qt->root);
     delete qt;
 

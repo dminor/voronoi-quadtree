@@ -29,10 +29,10 @@ template<class Site> class VoronoiQuadtree {
 
 public:
 
-    template<class T> struct Node {
+    struct Node {
         Node *ne, *nw, *sw, *se;
         double x1, x2, y1, y2;
-        T *site;
+        Site *site;
     };
 
     VoronoiQuadtree(double x1, double x2, double y1, double y2, Site *sites, size_t n, size_t max_depth, double (*metric)(Site *site, double x, double y)) : sites(sites), n(n), max_depth(max_depth), metric(metric)
@@ -44,7 +44,7 @@ public:
     { 
     }
 
-    Node<Site> *root;
+    Node *root;
     double (*metric)(Site *site, double x, double y);
 
 private:
@@ -65,9 +65,9 @@ private:
         return site; 
     }
 
-    Node<Site> *worker(double x1, double x2, double y1, double y2, int depth)
+    Node *worker(double x1, double x2, double y1, double y2, int depth)
     {
-        Node<Site> *node = new Node<Site>; 
+        Node *node = new Node; 
 
         Site *site1 = closest_site(x1, y1);
         Site *site2 = closest_site(x1, y2);
