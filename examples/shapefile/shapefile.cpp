@@ -20,9 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include <shapefil.h>
 
@@ -71,10 +72,13 @@ double pt_distance_to_line(double x, double y, double a_x, double a_y, double b_
     return (line_x-x)*(line_x-x) + (line_y-y)*(line_y-y); 
 } 
 
-double metric(Site *site, double x, double y)
+double metric(Site *site, double *pt)
 {
     SHPObject *obj = site->obj;
     double distance = std::numeric_limits<double>::max(); 
+
+    double &x = pt[0];
+    double &y = pt[1];
 
     if (obj) {
         switch(obj->nSHPType) {
@@ -157,15 +161,16 @@ void render_poly(FILE *f, int site, SHPObject *obj)
 
 void render_voronoi_quadtree(FILE *f, VoronoiQuadtree<Site>::Node *node)
 {
-    if (node->ne == 0 && node->nw == 0 && node->sw == 0 && node->se == 0) {
+    if (node->nodes == 0) {
         fprintf(f, "colour-site-%d\n", node->site->id);
-        fprintf(f, "%.1f %.1f %.1f %.1f box\n", node->x1, node->x2,
-            node->y1, node->y2);
+        fprintf(f, "%.1f %.1f %.1f %.1f box\n",
+            node->mid[0] - node->radius, node->mid[0] + node->radius,
+            node->mid[1] - node->radius, node->mid[1] + node->radius);
     } else {
-        render_voronoi_quadtree(f, node->ne);
-        render_voronoi_quadtree(f, node->nw);
-        render_voronoi_quadtree(f, node->sw);
-        render_voronoi_quadtree(f, node->se);
+        render_voronoi_quadtree(f, node->nodes[0]);
+        render_voronoi_quadtree(f, node->nodes[1]);
+        render_voronoi_quadtree(f, node->nodes[2]);
+        render_voronoi_quadtree(f, node->nodes[3]);
     }
 }
 
@@ -221,7 +226,10 @@ int main(int argc, char **argv)
 
     //setup colours
     for (int i = 0; i < entcount; ++i) {
-        fprintf(f, "/colour-site-%d {%.1f %.1f %.1f setrgbcolor } def\n", i, (double)rand()/(double)RAND_MAX, (double)rand()/(double)RAND_MAX,(double)rand()/(double)RAND_MAX);
+        fprintf(f, "/colour-site-%d {%.1f %.1f %.1f setrgbcolor } def\n", i,
+            (double)rand()/(double)RAND_MAX,
+            (double)rand()/(double)RAND_MAX,
+            (double)rand()/(double)RAND_MAX);
     }
 
     Site *sites = new Site[entcount];
@@ -248,8 +256,14 @@ int main(int argc, char **argv)
         }
     }
 
-    VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(min[0], max[0],
-        min[1], max[1], sites, entcount, max_depth, metric);
+    double mid[2];
+    mid[0] = (min[0] + max[0])*0.5;
+    mid[1] = (min[1] + max[1])*0.5;
+
+    double radius = std::max((max[0] - min[0])*0.5, (max[1] - min[1])*0.5); 
+
+    VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(2, mid, radius,
+        sites, entcount, max_depth, metric);
     render_voronoi_quadtree(f, qt->root);
     delete qt;
 
