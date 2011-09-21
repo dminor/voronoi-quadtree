@@ -1,5 +1,5 @@
 
-DIRS = shapefile 
+DIRS = points shapefile
 
 all:
 	for dir in $(DIRS); do cd $$dir; make; cd ..; done

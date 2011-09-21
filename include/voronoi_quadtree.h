@@ -52,7 +52,7 @@ public:
         dim(dim), nnodes(2*dim), sites(sites), n(n),
         max_depth(max_depth), metric(metric)
     {        
-        root = worker(mid, radius, 0); 
+        worker(&root, mid, radius, 0); 
     }
 
     virtual ~VoronoiQuadtree()
@@ -81,9 +81,9 @@ private:
         return site; 
     }
 
-    Node *worker(double *mid, double radius, int depth)
+    void worker(Node **node, double *mid, double radius, int depth)
     { 
-        Node *node = new Node; 
+        (*node) = new Node; 
 
         Site *closest = 0, *last_closest = 0;
 
@@ -116,18 +116,18 @@ private:
 
         if (all_same) {
 
-            node->mid = new double[dim];
+            (*node)->mid = new double[dim];
 
             for (int d = 0; d < dim; ++d) {
-                node->mid[d] = mid[d];
-                node->radius = radius;
+                (*node)->mid[d] = mid[d];
+                (*node)->radius = radius;
             }
 
-            node->site = closest;
+            (*node)->site = closest;
 
         } else {
 
-            node->nodes = new Node *[nnodes];
+            (*node)->nodes = new Node *[nnodes];
 
             double new_radius = 0.5*radius;
             for (int i = 0; i < nnodes; ++i) { 
@@ -139,14 +139,11 @@ private:
                     } 
                 }
 
-                node->nodes[i] = worker(pt, new_radius, depth + 1); 
+                worker(&(*node)->nodes[i], pt, new_radius, depth + 1); 
             } 
         }
 
-        delete[] pt;
-
-        return node; 
-
+        delete[] pt; 
     }
 
     void delete_worker(Node *n)

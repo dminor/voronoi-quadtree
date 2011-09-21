@@ -1,9 +1,9 @@
 INCS = -I../../include 
-LIBS = -lshp
+LIBS = 
 CFLAGS = -g
 LDFLAGS = -L../../bin 
 OBJS = main.o
-TARGET = ../../bin/voronoi-shp
+TARGET = ../../bin/voronoi-pts
 
 all: $(OBJS)
 	g++ $(LDFLAGS) $(LIBS) $(OBJS) -o $(TARGET) 
@@ -11,7 +11,7 @@ all: $(OBJS)
 .cpp.o:
 	g++ $(INCS) $(CFLAGS) -c $< -o $@
 
-shapefile.o: ../../include/voronoi_quadtree.h
+main.o: ../../include/voronoi_quadtree.h
 
 clean:
 	rm *.o $(TARGET) 
