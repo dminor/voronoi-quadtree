@@ -32,7 +32,7 @@ THE SOFTWARE.
 struct Site {
 
     SHPObject *obj;
-    size_t id;
+    int id;
 
     Site() : obj(0), id(0)
     {
@@ -127,43 +127,43 @@ double metric(Site *site, double *pt)
 
 void render_point(FILE *f, int site, double x, double y)
 {
-    fprintf(f, "colour-site-%d\n", site); 
-    fprintf(f, "%.0f %.0f 2 0 360 arc\n", x, y);
-    fprintf(f, "fill\n"); 
+    fprintf(stdout, "colour-site-%d\n", site); 
+    fprintf(stdout, "%.0f %.0f 2 0 360 arc\n", x, y);
+    fprintf(stdout, "fill\n"); 
 }
 
 void render_line(FILE *f, int site, SHPObject *obj)
 { 
-    fprintf(f, "colour-site-%d\n", site); 
-    fprintf(f, "newpath\n");
-    fprintf(f, "%.0f %.0f moveto\n", obj->padfX[0], obj->padfY[0]);
+    fprintf(stdout, "colour-site-%d\n", site); 
+    fprintf(stdout, "newpath\n");
+    fprintf(stdout, "%.0f %.0f moveto\n", obj->padfX[0], obj->padfY[0]);
 
     for (int j = 0; j < obj->nVertices; ++j) { 
-        fprintf(f, "%.0f %.0f lineto\n", obj->padfX[j], obj->padfY[j]);
+        fprintf(stdout, "%.0f %.0f lineto\n", obj->padfX[j], obj->padfY[j]);
     }
 
-    fprintf(f, "stroke\n"); 
+    fprintf(stdout, "stroke\n"); 
 }
 
 void render_poly(FILE *f, int site, SHPObject *obj)
 { 
-    fprintf(f, "colour-site-%d\n", site); 
-    fprintf(f, "newpath\n");
-    fprintf(f, "%.0f %.0f moveto\n", obj->padfX[0], obj->padfY[0]);
+    fprintf(stdout, "colour-site-%d\n", site); 
+    fprintf(stdout, "newpath\n");
+    fprintf(stdout, "%.0f %.0f moveto\n", obj->padfX[0], obj->padfY[0]);
 
     for (int j = 0; j < obj->nVertices; ++j) { 
-        fprintf(f, "%.0f %.0f lineto\n", obj->padfX[j], obj->padfY[j]);
+        fprintf(stdout, "%.0f %.0f lineto\n", obj->padfX[j], obj->padfY[j]);
     }
 
-    fprintf(f, "closepath\n");
-    fprintf(f, "fill\n"); 
+    fprintf(stdout, "closepath\n");
+    fprintf(stdout, "fill\n"); 
 }
 
 void render_voronoi_quadtree(FILE *f, VoronoiQuadtree<Site>::Node *node)
 {
     if (node->nodes == 0) {
-        fprintf(f, "colour-site-%d\n", node->site->id);
-        fprintf(f, "%.1f %.1f %.1f %.1f box\n",
+        fprintf(stdout, "colour-site-%d\n", node->site->id);
+        fprintf(stdout, "%.1f %.1f %.1f %.1f box\n",
             node->mid[0] - node->radius, node->mid[0] + node->radius,
             node->mid[1] - node->radius, node->mid[1] + node->radius);
     } else {
@@ -204,29 +204,28 @@ int main(int argc, char **argv)
     }
 
     //setup output file
-    FILE *f = fopen("voronoi-diagram.ps", "w");
-    fprintf(f, "%\n");
+    fprintf(stdout, "%%\n");
 
     //define box function for later
-    fprintf(f, "/box {\n");
-    fprintf(f, "    /y2 exch def\n");
-    fprintf(f, "    /y1 exch def\n");
-    fprintf(f, "    /x2 exch def\n");
-    fprintf(f, "    /x1 exch def\n");
-    fprintf(f, "    gsave\n");
-    fprintf(f, "    newpath\n");
-    fprintf(f, "    x1 y1 moveto\n");
-    fprintf(f, "    x1 y2 lineto\n");
-    fprintf(f, "    x2 y2 lineto\n");
-    fprintf(f, "    x2 y1 lineto\n");
-    fprintf(f, "    closepath\n");
-    fprintf(f, "    stroke\n");
-    fprintf(f, "    grestore\n");
-    fprintf(f, "} def\n");
+    fprintf(stdout, "/box {\n");
+    fprintf(stdout, "    /y2 exch def\n");
+    fprintf(stdout, "    /y1 exch def\n");
+    fprintf(stdout, "    /x2 exch def\n");
+    fprintf(stdout, "    /x1 exch def\n");
+    fprintf(stdout, "    gsave\n");
+    fprintf(stdout, "    newpath\n");
+    fprintf(stdout, "    x1 y1 moveto\n");
+    fprintf(stdout, "    x1 y2 lineto\n");
+    fprintf(stdout, "    x2 y2 lineto\n");
+    fprintf(stdout, "    x2 y1 lineto\n");
+    fprintf(stdout, "    closepath\n");
+    fprintf(stdout, "    stroke\n");
+    fprintf(stdout, "    grestore\n");
+    fprintf(stdout, "} def\n");
 
     //setup colours
     for (int i = 0; i < entcount; ++i) {
-        fprintf(f, "/colour-site-%d {%.1f %.1f %.1f setrgbcolor } def\n", i,
+        fprintf(stdout, "/colour-site-%d {%.1f %.1f %.1f setrgbcolor } def\n", i,
             (double)rand()/(double)RAND_MAX,
             (double)rand()/(double)RAND_MAX,
             (double)rand()/(double)RAND_MAX);
@@ -241,16 +240,16 @@ int main(int argc, char **argv)
         switch(type) {
 
             case SHPT_POINT:
-                render_point(f, i,
+                render_point(stdout, i,
                     sites[i].obj->padfX[0], sites[i].obj->padfY[0]);
                 break;
 
             case SHPT_ARC:
-                render_line(f, i, sites[i].obj);
+                render_line(stdout, i, sites[i].obj);
                 break;
 
             case SHPT_POLYGON:
-                render_poly(f, i, sites[i].obj);
+                render_poly(stdout, i, sites[i].obj);
                 break;
 
         }
@@ -264,13 +263,12 @@ int main(int argc, char **argv)
 
     VoronoiQuadtree<Site> *qt = new VoronoiQuadtree<Site>(2, mid, radius,
         sites, entcount, max_depth, metric);
-    render_voronoi_quadtree(f, qt->root);
+
+    render_voronoi_quadtree(stdout, qt->root);
     delete qt;
 
     delete[] sites;
     SHPClose(shp);
-
-    fclose(f);
  
     return 0;
 }
