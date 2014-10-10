@@ -6,7 +6,7 @@ OBJS = main.o
 TARGET = ../../bin/voronoi-shp
 
 all: $(OBJS)
-	g++ $(LDFLAGS) $(LIBS) $(OBJS) -o $(TARGET) 
+	g++ $(LDFLAGS) $(OBJS) $(LIBS) -o $(TARGET) 
 
 .cpp.o:
 	g++ $(INCS) $(CFLAGS) -c $< -o $@
